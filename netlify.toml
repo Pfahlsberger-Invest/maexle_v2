@@ -1,0 +1,13 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# SPA fallback (must come AFTER any function path configuration in code)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
