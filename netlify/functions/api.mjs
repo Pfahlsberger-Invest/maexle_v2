@@ -120,6 +120,7 @@ async function getFullState(req) {
 
   const audit = await sql`
     SELECT 'round'::text   AS kind,
+           r.id            AS id,
            r.loser_id      AS player_id,
            p.name          AS player_name,
            p.color         AS player_color,
@@ -130,6 +131,7 @@ async function getFullState(req) {
     JOIN players p ON p.id = r.loser_id
     UNION ALL
     SELECT 'schande'::text AS kind,
+           sa.id           AS id,
            sa.player_id,
            p.name,
            p.color,
@@ -261,6 +263,42 @@ export default async (req) => {
         await sql`UPDATE players SET archived_at = now() WHERE id = ${id}`;
         return json({ ok: true });
       }
+    }
+
+    // DELETE /api/audit/:kind/:id  { password }
+    // Löscht einen Audit-Eintrag und macht die zugehörige DB-Änderung rückgängig.
+    const auditMatch = path.match(/^\/audit\/(round|schande)\/([0-9a-fA-F-]{36})$/);
+    if (auditMatch && method === 'DELETE') {
+      const kind = auditMatch[1];
+      const id = auditMatch[2];
+      const { password } = await req.json().catch(() => ({}));
+      if (password !== ADMIN_PASSWORD) return err('Falsches Passwort', 403);
+
+      if (kind === 'round') {
+        // Cascade entfernt round_participants automatisch
+        const result = await sql`
+          DELETE FROM rounds WHERE id = ${id} RETURNING id
+        `;
+        if (result.length === 0) return err('Eintrag nicht gefunden', 404);
+        return json({ ok: true });
+      }
+
+      // schande: Delta vom Spieler rückgängig machen + Eintrag löschen,
+      // atomar in einer CTE-Query.
+      // Hinweis: bei ursprünglich geclippten Werten ist die Umkehrung approximativ.
+      const result = await sql`
+        WITH deleted AS (
+          DELETE FROM schande_adjustments WHERE id = ${id}
+          RETURNING player_id, delta
+        )
+        UPDATE players p
+        SET schande_score = GREATEST(-100, LEAST(100, schande_score - d.delta))
+        FROM deleted d
+        WHERE p.id = d.player_id
+        RETURNING p.id
+      `;
+      if (result.length === 0) return err('Eintrag nicht gefunden', 404);
+      return json({ ok: true });
     }
 
     // POST /rounds  { loser_id, participants: [uuid] }

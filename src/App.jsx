@@ -251,6 +251,26 @@ export default function App() {
     });
   };
 
+  // Open password prompt for deleting a single audit entry
+  const openDeleteAuditPrompt = (entry) => {
+    const isRound = entry.kind === 'round';
+    setPasswordPrompt({
+      title: isRound ? 'Runde löschen' : 'Schande-Eintrag löschen',
+      subtitle: isRound
+        ? `Diese Runde von "${entry.player_name}" wird gelöscht. Statistiken aller Teilnehmer dieser Runde werden entsprechend angepasst. Passwort eingeben:`
+        : `Diese Schande-Änderung (${entry.delta > 0 ? '+' : ''}${entry.delta}) bei "${entry.player_name}" wird gelöscht und der Score um diesen Betrag rückgängig gemacht. Passwort eingeben:`,
+      confirmLabel: 'Eintrag löschen',
+      destructive: true,
+      onConfirm: async (password) => {
+        await api(`/audit/${entry.kind}/${entry.id}`, {
+          method: 'DELETE',
+          body: { password },
+        });
+        await refresh();
+      },
+    });
+  };
+
   const openSchandeModal = (personId) => {
     setSliderValue(0);
     setSchandeModal(personId);
@@ -1078,7 +1098,8 @@ export default function App() {
                   <div className="col-span-3">Zeitpunkt</div>
                   <div className="col-span-3">Person</div>
                   <div className="col-span-2">Aktion</div>
-                  <div className="col-span-4 text-right">IP-Adresse</div>
+                  <div className="col-span-3">IP-Adresse</div>
+                  <div className="col-span-1 text-right">—</div>
                 </div>
               )}
 
@@ -1097,8 +1118,8 @@ export default function App() {
                     const isSchande = e.kind === 'schande';
                     return (
                       <div
-                        key={i}
-                        className="grid grid-cols-12 gap-2 px-6 py-3 border-b border-stone-100 hover:bg-stone-50 transition-colors items-center text-sm"
+                        key={`${e.kind}-${e.id}`}
+                        className="group grid grid-cols-12 gap-2 px-6 py-3 border-b border-stone-100 hover:bg-stone-50 transition-colors items-center text-sm"
                       >
                         <div className="col-span-3 mono text-[11px] text-stone-600">
                           <div className="font-bold text-stone-900">{time}</div>
@@ -1131,8 +1152,17 @@ export default function App() {
                             </span>
                           )}
                         </div>
-                        <div className="col-span-4 mono text-[11px] text-stone-500 text-right truncate">
+                        <div className="col-span-3 mono text-[11px] text-stone-500 truncate">
                           {e.ip || '—'}
+                        </div>
+                        <div className="col-span-1 flex justify-end">
+                          <button
+                            onClick={() => openDeleteAuditPrompt(e)}
+                            className="opacity-0 group-hover:opacity-50 hover:!opacity-100 text-stone-400 hover:text-rose-500 transition-all p-1 rounded"
+                            title="Eintrag löschen + rückgängig machen (Passwort)"
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
                       </div>
                     );
@@ -1141,7 +1171,7 @@ export default function App() {
               </div>
 
               <div className="px-6 py-3 border-t border-stone-200 mono text-[10px] text-stone-400 flex items-center justify-between">
-                <span>// neueste zuerst (max. 500)</span>
+                <span>// hover über zeile zum löschen</span>
                 <span>{clicksCount} klicks · {schandeCount} schande-änderungen</span>
               </div>
             </div>
